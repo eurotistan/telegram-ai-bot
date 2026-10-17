@@ -7,7 +7,12 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from google import genai
 
-# Render Web Service port uyumluluğu için hafif web sunucusu
+# ---------------------------------------------------------
+# YÖNETİCİ LİSTESİ (Özelden sadece buradakiler yazabilir)
+# İleride yeni kişi eklemek için virgül koyup ID yazabilirsiniz: [5502934982, YENI_ID_BURAYA]
+YONETICI_LISTESI = [5502934982]
+# ---------------------------------------------------------
+
 app_flask = Flask('')
 
 @app_flask.route('/')
@@ -17,33 +22,48 @@ def home():
 def run_web():
     app_flask.run(host='0.0.0.0', port=int(os.environ.get('PORT', 10000)))
 
-# Render ortam değişkenlerinden anahtarları alıyoruz
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY_EUROTISTAN")
 
 if not TELEGRAM_TOKEN or not GEMINI_API_KEY:
     raise ValueError("Lütfen Render paneline TELEGRAM_TOKEN ve GEMINI_API_KEY_EUROTISTAN değişkenlerini ekleyin!")
 
-# Google GenAI İstemcisi
 client = genai.Client(api_key=GEMINI_API_KEY)
 
 SYSTEM_INSTRUCTION = """
 Sen Last War oyununun 2221 numaralı sunucusunda yer alan BROS ittifakının neşeli, samimi ve bilgili bir üyesisin.
 Kuralların:
-1. Asla sürekli aynı kalıpla cevap verme, her defasında farklı cümleler kur.
+1. Asla sürekli aynı kalıpla cevap verme, her defasında farklı ve doğal cümleler kur.
 2. Doğal ve samimi bir oyuncu gibi konuş.
-3. Sana verilen [Sistem Bilgisi] içindeki Türkiye Saati ve Sunucu Saati değerlerini kesinlikle değiştirme ve aynen kullan. Türkiye saati ile oyun içi sunucu saati arasında 5 saat fark vardır (sunucu saati 5 saat geridedir).
+3. Saat veya tarih sorulduğunda, Türkiye saati ile oyun içi sunucu saati arasında 5 saat fark olduğunu (sunucu saatinin 5 saat geride olduğunu) hesaba kat. "Bizim saat" kelimesini kullanma; "Türkiye saati" ve "Sunucu saati" ifadelerini kullan.
+4. Oyun içi konularda Last War kavramlarını (fırınlar, Sezon 2 kutup kışı, T10 araştırmaları, VS günleri, BROS ittifakı) temel alarak cevap ver.
+5. Kullanıcı resim/ekran görüntüsü gönderdiğinde görseldeki detayları (oyun ekranı, savaş raporu, kahraman dizilimi vb.) dikkatlice analiz et ve yardımcı ol.
 """
 
+# Sohbet geçmişi hafızası
+chat_histories = {}
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    chat_type = update.effective_chat.type
+    
+    # Özel sohbet kontrolü (Sadece yöneticiler listedekiler)
+    if chat_type == "private" and user_id not in YONETICI_LISTESI:
+        return
+        
     await update.message.reply_text("Selam komutan! BROS ittifakına hoş geldin. 2221 sunucusunda bugün neler yapıyoruz?")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_text = update.message.text
-    if not user_text:
-        return
+    user_id = update.effective_user.id
+    chat_type = update.effective_chat.type
     
-    # Türkiye Saat Dilimi (Europe/Istanbul) zorlaması
+    # Özel mesajda sadece yöneticilere izin ver
+    if chat_type == "private" and user_id not in YONETICI_LISTESI:
+        return
+
+    user_text = update.message.text or update.message.caption or ""
+    
+    # Zaman hesaplamaları
     tz_tr = ZoneInfo("Europe/Istanbul")
     now_tr = datetime.datetime.now(tz_tr)
     now_server = now_tr - datetime.timedelta(hours=5)
@@ -52,17 +72,45 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     server_time_str = now_server.strftime("%H:%M:%S")
     current_date_str = now_tr.strftime("%d.%m.%Y")
     
-    prompt = f"[Sistem Bilgisi -> Türkiye Saati: {current_time_str}, Last War 2221 Oyun İçi Sunucu Saati: {server_time_str}, Tarih: {current_date_str}]\nKullanıcı mesajı: {user_text}"
+    sys_info = f"[Sistem Bilgisi -> Türkiye Saati: {current_time_str}, Last War 2221 Oyun İçi Sunucu Saati: {server_time_str}, Tarih: {current_date_str}]"
+
+    # Fotoğraf/Görsel Mesaj Kontrolü
+    image_bytes = None
+    if update.message.photo:
+        photo_file = await update.message.photo[-1].get_file()
+        image_bytes = await photo_file.download_as_bytearray()
+
+    # Sohbet Hafızası Yönetimi
+    chat_id = update.effective_chat.id
+    if chat_id not in chat_histories:
+        chat_histories[chat_id] = []
     
+    contents = [sys_info]
+    
+    for old_msg in chat_histories[chat_id][-6:]:
+        contents.append(old_msg)
+        
+    if user_text:
+        contents.append(f"Kullanıcı: {user_text}")
+    if image_bytes:
+        contents.append({"mime_type": "image/jpeg", "data": bytes(image_bytes)})
+        if not user_text:
+            contents.append("Kullanıcı bir görsel/ekran görüntüsü gönderdi. Resmi analiz et ve değerlendir.")
+
     try:
         response = client.models.generate_content(
             model='gemini-3.8-flash',
-            contents=prompt,
+            contents=contents,
             config={
                 'system_instruction': SYSTEM_INSTRUCTION
             }
         )
         reply_text = response.text if response.text else "Komutan şu an sinyal alamıyorum, tekrar dener misin?"
+        
+        if user_text:
+            chat_histories[chat_id].append(f"Kullanıcı: {user_text}")
+        chat_histories[chat_id].append(f"Asistan: {reply_text}")
+        
     except Exception as e:
         reply_text = f"Telsizde bir parazit oldu! Hata detayı: {e}"
         print(f"Hata detayı: {e}")
@@ -70,14 +118,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(reply_text)
 
 def main():
-    # Arka planda web sunucusunu başlat
     t = Thread(target=run_web)
     t.start()
 
-    # Telegram Botunu Başlat
     application = Application.builder().token(TELEGRAM_TOKEN).build()
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    application.add_handler(MessageHandler((filters.TEXT | filters.PHOTO) & ~filters.COMMAND, handle_message))
     
     print("Bot başarıyla başlatıldı ve dinliyor...")
     application.run_polling(drop_pending_updates=True)
