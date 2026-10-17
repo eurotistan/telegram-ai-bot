@@ -59,6 +59,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_text = update.message.text or update.message.caption or ""
     
+    # Grupta botun adını (etiketi) metinden temizleyelim ki yapay zeka kafası karışmasın
+    user_text = user_text.replace("@lastsisterbot", "").strip()
+
     # Zaman hesaplamaları
     tz_tr = ZoneInfo("Europe/Istanbul")
     now_tr = datetime.datetime.now(tz_tr)
@@ -70,7 +73,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     sys_info = f"[Sistem Bilgisi -> Türkiye Saati: {current_time_str}, Last War 2221 Oyun İçi Sunucu Saati: {server_time_str}, Tarih: {current_date_str}]"
 
-    # Güvenli Fotoğraf İşleme
     image_bytes = None
     if update.message.photo:
         try:
@@ -85,7 +87,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     contents = [sys_info]
     
-    for old_msg in chat_histories[chat_id][-6:]:
+    for old_msg in chat_histories[chat_id][-4:]:  # Hafızayı hafifletmek için son 4 mesaj
         contents.append(old_msg)
         
     if user_text:
@@ -96,11 +98,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not user_text:
             contents.append("Kullanıcı bir görsel/ekran görüntüsü gönderdi. Resmi analiz et ve değerlendir.")
 
-    # Eğer ne metin ne de resim varsa çık
     if not user_text and not image_bytes:
         return
 
     try:
+        # Gemini model çağrısı
         response = client.models.generate_content(
             model='gemini-3.8-flash',
             contents=contents,
@@ -108,14 +110,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 'system_instruction': SYSTEM_INSTRUCTION
             }
         )
-        reply_text = response.text if response.text else "Komutan şu an sinyal alamıyorum, tekrar dener misin?"
+        reply_text = response.text if response.text else "Komutan anlık sinyal kopması yaşadım, tekrar yazar mısın?"
         
         if user_text:
             chat_histories[chat_id].append(f"Kullanıcı: {user_text}")
         chat_histories[chat_id].append(f"Asistan: {reply_text}")
         
     except Exception as e:
-        reply_text = f"Telsizde bir parazit oldu! Hata detayı: {e}"
+        reply_text = f"Telsizde parazit var komutan! Hata: {e}"
         print(f"Hata detayı: {e}")
 
     await update.message.reply_text(reply_text)
@@ -128,7 +130,7 @@ def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler((filters.TEXT | filters.PHOTO) & ~filters.COMMAND, handle_message))
     
-    print("Bot başarıyla başlatıldı ve dinliyor...")
+    print("Bot başarıyla optimize edildi ve dinliyor...")
     application.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
