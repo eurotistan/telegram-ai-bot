@@ -53,6 +53,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     prompt = f"[Sistem Bilgisi -> Türkiye Saati: {current_time_str}, Last War 2221 Sunucu Saati: {server_time_str}, Tarih: {current_date_str}]\nKullanıcı: {user_text}"
     
     try:
+        # Doğru ve güncel google-genai model çağrısı
         response = client.models.generate_content(
             model='gemini-2.5-flash',
             contents=prompt,
@@ -62,8 +63,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         reply_text = response.text if response.text else "Komutan şu an sinyal alamıyorum, tekrar dener misin?"
     except Exception as e:
-        reply_text = "Telsizde bir parazit oldu, sonra tekrar dene!"
-        print(f"Hata: {e}")
+        reply_text = f"Telsizde bir parazit oldu! Hata detayı: {e}"
+        print(f"Hata detayı: {e}")
 
     await update.message.reply_text(reply_text)
 
@@ -78,7 +79,6 @@ def main():
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
     print("Bot başarıyla başlatıldı ve dinliyor...")
-    # Bekleyen güncellemeleri temizleyerek taze başlat
     application.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
