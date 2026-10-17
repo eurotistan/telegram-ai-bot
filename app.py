@@ -1,9 +1,10 @@
 import os
+import asyncio
 import datetime
 from zoneinfo import ZoneInfo
 from flask import Flask, request
 from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from google import genai
 
 # ---------------------------------------------------------
@@ -13,7 +14,6 @@ YONETICI_LISTESI = [5502934982]
 
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY_EUROTISTAN")
-# Render otomatik olarak RENDER_EXTERNAL_URL değişkenini verir (örn: https://last-sister-bot.onrender.com)
 WEBHOOK_URL = os.environ.get("RENDER_EXTERNAL_URL")
 
 if not TELEGRAM_TOKEN or not GEMINI_API_KEY:
@@ -33,7 +33,7 @@ Kuralların:
 
 chat_histories = {}
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def start(update: Update, context):
     user_id = update.effective_user.id
     chat_type = update.effective_chat.type
     
@@ -42,7 +42,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     await update.message.reply_text("Selam komutan! BROS ittifakına hoş geldin. 2221 sunucusunda bugün neler yapıyoruz?")
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_message(update: Update, context):
     user_id = update.effective_user.id
     chat_type = update.effective_chat.type
     
@@ -108,11 +108,25 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(reply_text)
 
-# Flask ve Telegram Entegrasyonu
+# Flask & Telegram Uygulaması
 app_flask = Flask(__name__)
 application = Application.builder().token(TELEGRAM_TOKEN).build()
 application.add_handler(CommandHandler("start", start))
 application.add_handler(MessageHandler((filters.TEXT | filters.PHOTO) & ~filters.COMMAND, handle_message))
+
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
+
+async def init_webhook():
+    await application.initialize()
+    await application.start()
+    if WEBHOOK_URL:
+        clean_url = WEBHOOK_URL.rstrip('/')
+        webhook_link = f"{clean_url}/{TELEGRAM_TOKEN}"
+        await application.bot.set_webhook(url=webhook_link)
+        print(f"Webhook başarıyla kuruldu: {webhook_link}")
+
+loop.run_until_complete(init_webhook())
 
 @app_flask.route('/')
 def home():
@@ -121,18 +135,8 @@ def home():
 @app_flask.route(f'/{TELEGRAM_TOKEN}', methods=['POST'])
 def webhook():
     update = Update.de_json(request.get_json(force=True), application.bot)
-    application.update_queue.put_nowait(update)
+    loop.create_task(application.process_update(update))
     return 'ok', 200
 
-def main():
-    application.initialize()
-    if WEBHOOK_URL:
-        webhook_link = f"{WEBHOOK_URL}/{TELEGRAM_TOKEN}"
-        application.bot.set_webhook(url=webhook_link)
-        print(f"Webhook başarıyla ayarlandı: {webhook_link}")
-    
-    application.start()
-    app_flask.run(host='0.0.0.0', port=int(os.environ.get('PORT', 10000)))
-
 if __name__ == "__main__":
-    main()
+    app_flask.run(host='0.0.0.0', port=int(os.environ.get('PORT', 10000)))
