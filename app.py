@@ -1,41 +1,56 @@
 import os
 import datetime
+from flask import Flask
+from threading import Thread
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from google import genai
 
-# Anahtarları Render'ın ortam değişkenlerinden alıyoruz
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
-GEMINI_API_KEY_EUROTISTAN = os.environ.get("GEMINI_API_KEY_EUROTISTAN")
+# Render Web Service için hafif bir Web Sunucusu (Port hatasını engeller)
+app_flask = Flask('')
 
-if not TELEGRAM_TOKEN or not GEMINI_API_KEY_EUROTISTAN:
+@app_flask.route('/')
+def home():
+    return "Bot aktif ve çalışıyor!"
+
+def run_web():
+    app_flask.run(host='0.0.0.0', port=int(os.environ.get('PORT', 10000)))
+
+# Anahtarları alıyoruz (Sizin belirlediğiniz özel isim kullanılıyor)
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY_EUROTISTAN")
+
+if not TELEGRAM_TOKEN or not GEMINI_API_KEY:
     raise ValueError("Lütfen Render paneline TELEGRAM_TOKEN ve GEMINI_API_KEY_EUROTISTAN değişkenlerini ekleyin!")
 
 # Yeni Google GenAI İstemcisi
-client = genai.Client(api_key=GEMINI_API_KEY_EUROTISTAN)
+client = genai.Client(api_key=GEMINI_API_KEY)
 
 SYSTEM_INSTRUCTION = """
-Sen Telegram'da kullanıcılarla sohbet eden samimi, zeki ve neşeli bir yapay zeka asistanısın.
+Sen Last War oyununun 2221 numaralı sunucusunda yer alan BROS ittifakının neşeli, samimi ve bilgili bir üyesisin.
 Kuralların:
-1. Kullanıcılar sana selam verdiğinde veya hatır sorduğunda ASLA sürekli aynı kalıpla cevap verme. Her defasında farklı kelimeler, farklı cümle yapıları ve özgün ifadeler kullanarak varyasyonlu yanıtlar üret.
-2. Doğal ve insan gibi konuş, çok resmi veya mekanik olma.
-3. Eğer kullanıcı sana saat veya tarih sorarsa, sistem tarafından sana iletilen anlık zaman bilgisini kullanarak doğru cevabı ver.
+1. Asla sürekli aynı kalıpla cevap verme, her defasında farklı cümleler kur.
+2. Doğal ve samimi bir oyuncu gibi konuş.
+3. Saat veya tarih sorulduğunda, Türkiye saati ile sunucu saati arasında 5 saat fark olduğunu ve sunucu saatinin daha geride olduğunu hesaba katarak zaman bilgisini ona göre ver.
 """
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Merhaba! Ben senin yapay zeka destekli sohbet botunum. Benimle dilediğin gibi konuşabilirsin!")
+    await update.message.reply_text("Selam komutan! BROS ittifakına hoş geldin. Bugün sunucuda neler yapıyoruz?")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_text = update.message.text
     
-    now = datetime.datetime.now()
-    current_time_str = now.strftime("%H:%M:%S")
-    current_date_str = now.strftime("%d.%m.%Y")
+    # Zaman hesaplamaları (Türkiye ve Sunucu Saati)
+    now_tr = datetime.datetime.now()
+    now_server = now_tr - datetime.timedelta(hours=5)
     
-    prompt = f"[Sistem Bilgisi: Şu anki anlık saat: {current_time_str}, Tarih: {current_date_str}]\nKullanıcı: {user_text}"
+    current_time_str = now_tr.strftime("%H:%M:%S")
+    server_time_str = now_server.strftime("%H:%M:%S")
+    current_date_str = now_tr.strftime("%d.%m.%Y")
+    
+    prompt = f"[Sistem Bilgisi -> Türkiye Saati: {current_time_str}, Last War 2221 Sunucu Saati: {server_time_str}, Tarih: {current_date_str}]\nKullanıcı: {user_text}"
     
     try:
-        # Yeni Gemini API çağrı formatı
         response = client.models.generate_content(
             model='gemini-2.5-flash',
             contents=prompt,
@@ -43,20 +58,25 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 'system_instruction': SYSTEM_INSTRUCTION
             }
         )
-        reply_text = response.text if response.text else "Şu an cevap üretemedim, tekrar dener misin?"
+        reply_text = response.text if response.text else "Komutan şu an sinyal alamıyorum, tekrar dener misin?"
     except Exception as e:
-        reply_text = "Ufak bir aksaklık oldu, lütfen biraz sonra tekrar dene!"
+        reply_text = "Telsizde bir parazit oldu, sonra tekrar dene!"
         print(f"Hata: {e}")
 
     await update.message.reply_text(reply_text)
 
 def main():
-    app = Application.builder().token(TELEGRAM_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    # Arkada web sunucusunu başlat (Render port kuralı için)
+    t = Thread(target=run_web)
+    t.start()
+
+    # Telegram Botunu Başlat
+    application = Application.builder().token(TELEGRAM_TOKEN).build()
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
     print("Bot başarıyla başlatıldı ve dinliyor...")
-    app.run_polling()
+    application.run_polling()
 
 if __name__ == "__main__":
     main()
