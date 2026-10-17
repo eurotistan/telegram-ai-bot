@@ -1,8 +1,7 @@
 import os
 import datetime
 from zoneinfo import ZoneInfo
-from flask import Flask
-from threading import Thread
+from flask import Flask, request
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from google import genai
@@ -12,17 +11,10 @@ from google import genai
 # ---------------------------------------------------------
 YONETICI_LISTESI = [5502934982]
 
-app_flask = Flask('')
-
-@app_flask.route('/')
-def home():
-    return "Last War BROS Bot aktif ve çalışıyor!"
-
-def run_web():
-    app_flask.run(host='0.0.0.0', port=int(os.environ.get('PORT', 10000)))
-
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY_EUROTISTAN")
+# Render otomatik olarak RENDER_EXTERNAL_URL değişkenini verir (örn: https://last-sister-bot.onrender.com)
+WEBHOOK_URL = os.environ.get("RENDER_EXTERNAL_URL")
 
 if not TELEGRAM_TOKEN or not GEMINI_API_KEY:
     raise ValueError("Lütfen Render paneline TELEGRAM_TOKEN ve GEMINI_API_KEY_EUROTISTAN değişkenlerini ekleyin!")
@@ -58,11 +50,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     user_text = update.message.text or update.message.caption or ""
-    
-    # Grupta botun adını (etiketi) metinden temizleyelim ki yapay zeka kafası karışmasın
     user_text = user_text.replace("@lastsisterbot", "").strip()
 
-    # Zaman hesaplamaları
     tz_tr = ZoneInfo("Europe/Istanbul")
     now_tr = datetime.datetime.now(tz_tr)
     now_server = now_tr - datetime.timedelta(hours=5)
@@ -86,13 +75,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_histories[chat_id] = []
     
     contents = [sys_info]
-    
-    for old_msg in chat_histories[chat_id][-4:]:  # Hafızayı hafifletmek için son 4 mesaj
+    for old_msg in chat_histories[chat_id][-4:]:
         contents.append(old_msg)
         
     if user_text:
         contents.append(f"Kullanıcı: {user_text}")
-    
     if image_bytes:
         contents.append({"mime_type": "image/jpeg", "data": bytes(image_bytes)})
         if not user_text:
@@ -102,7 +89,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     try:
-        # Gemini model çağrısı
         response = client.models.generate_content(
             model='gemini-3.8-flash',
             contents=contents,
@@ -122,16 +108,31 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(reply_text)
 
-def main():
-    t = Thread(target=run_web)
-    t.start()
+# Flask ve Telegram Entegrasyonu
+app_flask = Flask(__name__)
+application = Application.builder().token(TELEGRAM_TOKEN).build()
+application.add_handler(CommandHandler("start", start))
+application.add_handler(MessageHandler((filters.TEXT | filters.PHOTO) & ~filters.COMMAND, handle_message))
 
-    application = Application.builder().token(TELEGRAM_TOKEN).build()
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(MessageHandler((filters.TEXT | filters.PHOTO) & ~filters.COMMAND, handle_message))
+@app_flask.route('/')
+def home():
+    return "Last War BROS Webhook Bot aktif!"
+
+@app_flask.route(f'/{TELEGRAM_TOKEN}', methods=['POST'])
+def webhook():
+    update = Update.de_json(request.get_json(force=True), application.bot)
+    application.update_queue.put_nowait(update)
+    return 'ok', 200
+
+def main():
+    application.initialize()
+    if WEBHOOK_URL:
+        webhook_link = f"{WEBHOOK_URL}/{TELEGRAM_TOKEN}"
+        application.bot.set_webhook(url=webhook_link)
+        print(f"Webhook başarıyla ayarlandı: {webhook_link}")
     
-    print("Bot başarıyla optimize edildi ve dinliyor...")
-    application.run_polling(drop_pending_updates=True)
+    application.start()
+    app_flask.run(host='0.0.0.0', port=int(os.environ.get('PORT', 10000)))
 
 if __name__ == "__main__":
     main()
