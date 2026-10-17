@@ -53,9 +53,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     prompt = f"[Sistem Bilgisi -> Türkiye Saati: {current_time_str}, Last War 2221 Sunucu Saati: {server_time_str}, Tarih: {current_date_str}]\nKullanıcı: {user_text}"
     
     try:
-        # Doğru ve güncel google-genai model çağrısı
+        # Google'ın önerdiği güncel model adı kullanılıyor
         response = client.models.generate_content(
-            model='gemini-2.5-flash',
+            model='gemini-3.8-flash',
             contents=prompt,
             config={
                 'system_instruction': SYSTEM_INSTRUCTION
