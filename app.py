@@ -6,24 +6,24 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from google import genai
 
-# Render Web Service için hafif bir Web Sunucusu (Port hatasını engeller)
+# Render Web Service port uyumluluğu için hafif web sunucusu
 app_flask = Flask('')
 
 @app_flask.route('/')
 def home():
-    return "Bot aktif ve çalışıyor!"
+    return "Last War BROS Bot aktif ve çalışıyor!"
 
 def run_web():
     app_flask.run(host='0.0.0.0', port=int(os.environ.get('PORT', 10000)))
 
-# Anahtarları alıyoruz (Sizin belirlediğiniz özel isim kullanılıyor)
+# Render ortam değişkenlerinden anahtarları alıyoruz
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY_EUROTISTAN")
 
 if not TELEGRAM_TOKEN or not GEMINI_API_KEY:
     raise ValueError("Lütfen Render paneline TELEGRAM_TOKEN ve GEMINI_API_KEY_EUROTISTAN değişkenlerini ekleyin!")
 
-# Yeni Google GenAI İstemcisi
+# Google GenAI İstemcisi
 client = genai.Client(api_key=GEMINI_API_KEY)
 
 SYSTEM_INSTRUCTION = """
@@ -31,14 +31,16 @@ Sen Last War oyununun 2221 numaralı sunucusunda yer alan BROS ittifakının ne�
 Kuralların:
 1. Asla sürekli aynı kalıpla cevap verme, her defasında farklı cümleler kur.
 2. Doğal ve samimi bir oyuncu gibi konuş.
-3. Saat veya tarih sorulduğunda, Türkiye saati ile sunucu saati arasında 5 saat fark olduğunu ve sunucu saatinin daha geride olduğunu hesaba katarak zaman bilgisini ona göre ver.
+3. Saat veya tarih sorulduğunda, Türkiye saati ile sunucu saati arasında 5 saat fark olduğunu (sunucu saatinin 5 saat geride olduğunu) hesaba katarak zaman bilgisini ona göre ver.
 """
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Selam komutan! BROS ittifakına hoş geldin. Bugün sunucuda neler yapıyoruz?")
+    await update.message.reply_text("Selam komutan! BROS ittifakına hoş geldin. 2221 sunucusunda bugün neler yapıyoruz?")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_text = update.message.text
+    if not user_text:
+        return
     
     # Zaman hesaplamaları (Türkiye ve Sunucu Saati)
     now_tr = datetime.datetime.now()
@@ -66,7 +68,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(reply_text)
 
 def main():
-    # Arkada web sunucusunu başlat (Render port kuralı için)
+    # Arka planda web sunucusunu başlat
     t = Thread(target=run_web)
     t.start()
 
@@ -76,7 +78,8 @@ def main():
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
     print("Bot başarıyla başlatıldı ve dinliyor...")
-    application.run_polling()
+    # Bekleyen güncellemeleri temizleyerek taze başlat
+    application.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
     main()
