@@ -1,6 +1,8 @@
 import os
+import asyncio
 import datetime
 from zoneinfo import ZoneInfo
+from flask import Flask, request
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from google import genai
@@ -30,6 +32,9 @@ Kuralların:
 """
 
 chat_histories = {}
+
+app_flask = Flask(__name__)
+application = Application.builder().token(TELEGRAM_TOKEN).build()
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -106,27 +111,35 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(reply_text)
 
+application.add_handler(CommandHandler("start", start))
+application.add_handler(MessageHandler((filters.TEXT | filters.PHOTO) & ~filters.COMMAND, handle_message))
+
+loop = asyncio.get_event_loop()
+
+@app_flask.route('/')
+def home():
+    return "Last War BROS Webhook Bot aktif!"
+
+@app_flask.route(f'/{TELEGRAM_TOKEN}', methods=['POST'])
+def webhook():
+    json_data = request.get_json(force=True)
+    update = Update.de_json(json_data, application.bot)
+    asyncio.run_coroutine_threadsafe(application.process_update(update), loop)
+    return 'ok', 200
+
+async def setup_webhook():
+    await application.initialize()
+    await application.start()
+    if WEBHOOK_URL:
+        clean_url = WEBHOOK_URL.rstrip('/')
+        webhook_link = f"{clean_url}/{TELEGRAM_TOKEN}"
+        await application.bot.set_webhook(url=webhook_link)
+        print(f"Webhook başarıyla kuruldu: {webhook_link}")
+
 def main():
-    application = Application.builder().token(TELEGRAM_TOKEN).build()
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(MessageHandler((filters.TEXT | filters.PHOTO) & ~filters.COMMAND, handle_message))
-
+    loop.run_until_complete(setup_webhook())
     port = int(os.environ.get("PORT", 10000))
-    
-    if not WEBHOOK_URL:
-        raise ValueError("RENDER_EXTERNAL_URL ortam değişkeni bulunamadı!")
-
-    clean_url = WEBHOOK_URL.rstrip('/')
-    webhook_url = f"{clean_url}/{TELEGRAM_TOKEN}"
-
-    print(f"Webhook başlatılıyor... Adres: {webhook_url}")
-
-    application.run_webhook(
-        listen="0.0.0.0",
-        port=port,
-        url_path=TELEGRAM_TOKEN,
-        webhook_url=webhook_url
-    )
+    app_flask.run(host='0.0.0.0', port=port)
 
 if __name__ == "__main__":
     main()
