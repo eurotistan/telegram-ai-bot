@@ -1,5 +1,6 @@
 import os
 import datetime
+from zoneinfo import ZoneInfo
 from flask import Flask
 from threading import Thread
 from telegram import Update
@@ -31,7 +32,7 @@ Sen Last War oyununun 2221 numaralı sunucusunda yer alan BROS ittifakının ne�
 Kuralların:
 1. Asla sürekli aynı kalıpla cevap verme, her defasında farklı cümleler kur.
 2. Doğal ve samimi bir oyuncu gibi konuş.
-3. Saat veya tarih sorulduğunda, Türkiye saati ile sunucu saati arasında 5 saat fark olduğunu (sunucu saatinin 5 saat geride olduğunu) hesaba katarak zaman bilgisini ona göre ver.
+3. Sana verilen [Sistem Bilgisi] içindeki Türkiye Saati ve Sunucu Saati değerlerini kesinlikle değiştirme ve aynen kullan. Türkiye saati ile oyun içi sunucu saati arasında 5 saat fark vardır (sunucu saati 5 saat geridedir).
 """
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -42,18 +43,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not user_text:
         return
     
-    # Zaman hesaplamaları (Türkiye ve Sunucu Saati)
-    now_tr = datetime.datetime.now()
+    # Türkiye Saat Dilimi (Europe/Istanbul) zorlaması
+    tz_tr = ZoneInfo("Europe/Istanbul")
+    now_tr = datetime.datetime.now(tz_tr)
     now_server = now_tr - datetime.timedelta(hours=5)
     
     current_time_str = now_tr.strftime("%H:%M:%S")
     server_time_str = now_server.strftime("%H:%M:%S")
     current_date_str = now_tr.strftime("%d.%m.%Y")
     
-    prompt = f"[Sistem Bilgisi -> Türkiye Saati: {current_time_str}, Last War 2221 Sunucu Saati: {server_time_str}, Tarih: {current_date_str}]\nKullanıcı: {user_text}"
+    prompt = f"[Sistem Bilgisi -> Türkiye Saati: {current_time_str}, Last War 2221 Oyun İçi Sunucu Saati: {server_time_str}, Tarih: {current_date_str}]\nKullanıcı mesajı: {user_text}"
     
     try:
-        # Google'ın önerdiği güncel model adı kullanılıyor
         response = client.models.generate_content(
             model='gemini-3.8-flash',
             contents=prompt,
