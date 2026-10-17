@@ -6,13 +6,13 @@ from google import genai
 
 # Anahtarları Render'ın ortam değişkenlerinden alıyoruz
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY_EUROTISTAN")
 
-if not TELEGRAM_TOKEN or not GEMINI_API_KEY:
-    raise ValueError("Lütfen Render paneline TELEGRAM_TOKEN ve GEMINI_API_KEY değişkenlerini ekleyin!")
+if not TELEGRAM_TOKEN or not GEMINI_API_KEY_EUROTISTAN:
+    raise ValueError("Lütfen Render paneline TELEGRAM_TOKEN ve GEMINI_API_KEY_EUROTISTAN değişkenlerini ekleyin!")
 
 # Yeni Google GenAI İstemcisi
-client = genai.Client(api_key=GEMINI_API_KEY)
+client = genai.Client(api_key=GEMINI_API_KEY_EUROTISTAN)
 
 SYSTEM_INSTRUCTION = """
 Sen Telegram'da kullanıcılarla sohbet eden samimi, zeki ve neşeli bir yapay zeka asistanısın.
