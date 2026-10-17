@@ -8,10 +8,9 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 from google import genai
 
 # ---------------------------------------------------------
-# YÖNETİCİ LİSTESİ (Özelden sadece buradakiler yazabilir)
-# İleride yeni kişi eklemek için virgül koyup ID yazabilirsiniz: [5502934982, YENI_ID_BURAYA]
-YONETICI_LISTESI = [5502934982]
+# YÖNETİCİ LİSTESİ
 # ---------------------------------------------------------
+YONETICI_LISTESI = [5502934982]
 
 app_flask = Flask('')
 
@@ -37,17 +36,15 @@ Kuralların:
 2. Doğal ve samimi bir oyuncu gibi konuş.
 3. Saat veya tarih sorulduğunda, Türkiye saati ile oyun içi sunucu saati arasında 5 saat fark olduğunu (sunucu saatinin 5 saat geride olduğunu) hesaba kat. "Bizim saat" kelimesini kullanma; "Türkiye saati" ve "Sunucu saati" ifadelerini kullan.
 4. Oyun içi konularda Last War kavramlarını (fırınlar, Sezon 2 kutup kışı, T10 araştırmaları, VS günleri, BROS ittifakı) temel alarak cevap ver.
-5. Kullanıcı resim/ekran görüntüsü gönderdiğinde görseldeki detayları (oyun ekranı, savaş raporu, kahraman dizilimi vb.) dikkatlice analiz et ve yardımcı ol.
+5. Kullanıcı resim/ekran görüntüsü gönderdiğinde görseldeki detayları dikkatlice analiz et ve yardımcı ol.
 """
 
-# Sohbet geçmişi hafızası
 chat_histories = {}
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     chat_type = update.effective_chat.type
     
-    # Özel sohbet kontrolü (Sadece yöneticiler listedekiler)
     if chat_type == "private" and user_id not in YONETICI_LISTESI:
         return
         
@@ -57,7 +54,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     chat_type = update.effective_chat.type
     
-    # Özel mesajda sadece yöneticilere izin ver
     if chat_type == "private" and user_id not in YONETICI_LISTESI:
         return
 
@@ -74,13 +70,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     sys_info = f"[Sistem Bilgisi -> Türkiye Saati: {current_time_str}, Last War 2221 Oyun İçi Sunucu Saati: {server_time_str}, Tarih: {current_date_str}]"
 
-    # Fotoğraf/Görsel Mesaj Kontrolü
+    # Güvenli Fotoğraf İşleme
     image_bytes = None
     if update.message.photo:
-        photo_file = await update.message.photo[-1].get_file()
-        image_bytes = await photo_file.download_as_bytearray()
+        try:
+            photo_file = await update.message.photo[-1].get_file()
+            image_bytes = await photo_file.download_as_bytearray()
+        except Exception as img_err:
+            print(f"Görsel indirme hatası: {img_err}")
 
-    # Sohbet Hafızası Yönetimi
     chat_id = update.effective_chat.id
     if chat_id not in chat_histories:
         chat_histories[chat_id] = []
@@ -92,10 +90,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     if user_text:
         contents.append(f"Kullanıcı: {user_text}")
+    
     if image_bytes:
         contents.append({"mime_type": "image/jpeg", "data": bytes(image_bytes)})
         if not user_text:
             contents.append("Kullanıcı bir görsel/ekran görüntüsü gönderdi. Resmi analiz et ve değerlendir.")
+
+    # Eğer ne metin ne de resim varsa çık
+    if not user_text and not image_bytes:
+        return
 
     try:
         response = client.models.generate_content(
