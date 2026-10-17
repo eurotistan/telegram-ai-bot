@@ -6,7 +6,7 @@ from google import genai
 
 # Anahtarları Render'ın ortam değişkenlerinden alıyoruz
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY_EUROTISTAN")
+GEMINI_API_KEY_EUROTISTAN = os.environ.get("GEMINI_API_KEY_EUROTISTAN")
 
 if not TELEGRAM_TOKEN or not GEMINI_API_KEY_EUROTISTAN:
     raise ValueError("Lütfen Render paneline TELEGRAM_TOKEN ve GEMINI_API_KEY_EUROTISTAN değişkenlerini ekleyin!")
